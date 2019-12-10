@@ -10,8 +10,10 @@ from torch.utils.data import Dataset
 # PANDAS
 import pandas as pd
 
+import h5py
+import pickle as pkl
 
-class MidiDataset(Dataset):
+class MidiToFile(Dataset):
     """MIDI dataset."""
 
     def __init__(self, data, data_type = "train"):
@@ -19,38 +21,44 @@ class MidiDataset(Dataset):
         Args:None 
         """
         self.data_type = data_type
-        self.all_instruments_df = data
+        self.dataset_name = data_type
+        self.all_songs_df = data
 
         self.list_of_songs       = []
         self.label_list_of_songs = []
         
-        self.f_list_of_songs       = []
-        self.f_label_list_of_songs = []
-        
         self.chunk_step_size = 1
+        self.chunk_size = 50
 
         if self.data_type == "train" or self.data_type == "val":
             self.chunk_step_size = 10
-                
+            
+        self.length = 0
+            
+        self.dict_of_where_to_look = {}
+        
+        filename = data_type + '.hdf5'
+        filename_labels = data_type + "Labels.hdf5"
+            
         self.construct_list_of_songs()
-        self.flatten_data() 
+        
+        with h5py.File(filename, 'w') as hf:
+            self.save_data(hf, self.list_of_songs)
+            
+        with h5py.File(filename_labels, 'w') as hf: 
+            self.save_data(hf, self.label_list_of_songs)
+            
+        with open("Other.pkl", "wb") as pf:
+            pkl.dump((self.length, self.dict_of_where_to_look), pf)
         
         
-        
-    def __len__(self):
-        """
-        Return the length of the dataset  
-        """
-        return len(self.f_list_of_songs)
-
-
-    def __getitem__(self, idx):
-        """
-        Return the idx-th element of the dataset  
-        """
-        return self.f_list_of_songs[idx], self.f_label_list_of_songs[idx]
- 
+    def get_length(self): 
+        return self.length
     
+    def get_dict(self):
+        return self.dict_of_where_to_look
+        
+ 
     def instrument_to_index(self, instrument):
         """
         Return the index of the category the instrument belongs to 
@@ -82,8 +90,7 @@ class MidiDataset(Dataset):
             return 3
         else:
             return -1
-          
-
+        
     def construct_list_of_songs(self):
         """
         Import an array of midi files and output a list of songs 
@@ -98,50 +105,47 @@ class MidiDataset(Dataset):
         num_instruments = 4
         
         # Iterate through every midi and extract chunks in each song 
-#         for idx, row in self.all_instruments_df.iterrows():
-        for idx, row in self.all_instruments_df.items():
-#             t_end = row["midi"].get_end_time()
+        for idx, row in self.all_songs_df.items():
             t_end = row.get_end_time()
             num_timeslices = int(t_end/T)
 
             # Create data array to store all of the notes in the song based on the timestep they are played in 
-            data = np.zeros((num_notes * num_instruments, num_timeslices)) # rows: notes, instruments, cols: timeslices
+            data = np.zeros((num_notes * num_instruments, num_timeslices)) 
             
-#             for instrument in row["midi"].instruments:
             for instrument in row.instruments:
                 index = self.instrument_to_index(instrument.program)
                 if (index != -1):
                     for note in instrument.notes:
                         data[num_notes * index + note.pitch, math.floor(note.start/T):math.floor(note.end/T)] = 1   
-
-            # Create chunks for a single song given its data array 
-            list_of_chunks       = []
-            list_of_chunk_labels = []
-            start_index = 0
-            end_index   = start_index + chunk_size
-            while(end_index < num_timeslices):
-                chunk = data[0:num_notes*(num_instruments-1),start_index:end_index]
-                label = data[num_notes*(num_instruments-1):num_notes * num_instruments,start_index + int(chunk_size/2)]
-                list_of_chunks.append(chunk)
-                list_of_chunk_labels.append(label)
-                start_index = start_index + chunk_offset
-                end_index = start_index + chunk_size
-
-            self.list_of_songs.append(list_of_chunks)
-            self.label_list_of_songs.append(list_of_chunk_labels)
             
-            
-    def flatten_data(self): 
-        """
-        Flatten each set into a list of chunks. 
-        """
-        # Flatten data 
-        for song_list in self.list_of_songs:
-            for chunk in song_list:
-                self.f_list_of_songs.append(chunk)
-     
-        for song_list in self.label_list_of_songs:
-            for chunk in song_list:
-                self.f_label_list_of_songs.append(chunk)
-
+            self.list_of_songs.append(data[0:num_notes*(num_instruments-1), :])
+            self.label_list_of_songs.append(data[num_notes*(num_instruments-1):num_notes*num_instruments, :])
         
+            
+    def save_data(self,hf, list_of_items): 
+        print("Length of list: ", len(list_of_items))
+        chunk_idx = 0
+        for idx, song in enumerate(list_of_items):
+            for chunk in range(0, len(song), 10):
+                self.dict_of_where_to_look[chunk_idx] = (idx, (chunk, chunk+self.chunk_size))
+                chunk_idx += 1
+            self.write_song_to_h5(str(idx), song, hf)
+            print("Song index: ", idx)
+        if (chunk_idx != 0): 
+            self.length = chunk_idx
+        print("Num chunks: ", self.length)
+            
+    def write_song_to_h5(self, idx, song, hf): 
+        # idx corresponds to the song index written as a string
+#         import pdb; pdb.set_trace()
+        hf.create_dataset(idx, data=song)
+    
+    def save_dict(self, hf):
+        hf.create_dataset('Dict', data=self.dict_of_where_to_look)
+        
+    def save_length(self, hf): 
+        hf.create_dataset('Length', data=self.length)
+                       
+
+    
+    

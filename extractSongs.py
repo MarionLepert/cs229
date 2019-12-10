@@ -4,22 +4,21 @@ import numpy as np
 import collections
 import math
 
-# PYTORCH 
-from torch.utils.data import Dataset
-
 # PANDAS
 import pandas as pd
 
+import h5py
 
-class MidiDataset(Dataset):
-    """MIDI dataset."""
 
+class ExtractSongs():
+    
     def __init__(self, data, data_type = "train"):
         """
         Args:None 
         """
         self.data_type = data_type
-        self.all_instruments_df = data
+        self.dataset_name = data_type
+        self.all_songs_df = data
 
         self.list_of_songs       = []
         self.label_list_of_songs = []
@@ -28,29 +27,31 @@ class MidiDataset(Dataset):
         self.f_label_list_of_songs = []
         
         self.chunk_step_size = 1
+        self.chunk_size = 50
 
         if self.data_type == "train" or self.data_type == "val":
             self.chunk_step_size = 10
-                
+            
+        self.dict_of_where_to_look = {}
+            
         self.construct_list_of_songs()
-        self.flatten_data() 
         
-        
-        
-    def __len__(self):
-        """
-        Return the length of the dataset  
-        """
-        return len(self.f_list_of_songs)
-
-
-    def __getitem__(self, idx):
-        """
-        Return the idx-th element of the dataset  
-        """
-        return self.f_list_of_songs[idx], self.f_label_list_of_songs[idx]
+        filename = data_type + '.hdf5'
+        filename_labels = data_type + "Labels.hdf5"
+            
+        with h5py.File(filename, 'a') as hf:
+            self.save_data(hf, self.list_of_songs)
+            
+        with h5py.File(filename_labels, 'a') as hf: 
+            self.save_data(hf, self.label_list_of_songs)
  
+        
+    def get_list_of_songs(self): 
+        return self.f_list_of_songs
     
+    def get_labels_list_of_songs(self): 
+        return self.f_label_list_of_songs
+        
     def instrument_to_index(self, instrument):
         """
         Return the index of the category the instrument belongs to 
@@ -82,8 +83,7 @@ class MidiDataset(Dataset):
             return 3
         else:
             return -1
-          
-
+        
     def construct_list_of_songs(self):
         """
         Import an array of midi files and output a list of songs 
@@ -98,8 +98,39 @@ class MidiDataset(Dataset):
         num_instruments = 4
         
         # Iterate through every midi and extract chunks in each song 
-#         for idx, row in self.all_instruments_df.iterrows():
-        for idx, row in self.all_instruments_df.items():
+        for idx, row in self.all_songs_df.items():
+            t_end = row.get_end_time()
+            num_timeslices = int(t_end/T)
+
+            # Create data array to store all of the notes in the song based on the timestep they are played in 
+            data = np.zeros((num_notes * num_instruments, num_timeslices)) 
+            
+            for instrument in row.instruments:
+                index = self.instrument_to_index(instrument.program)
+                if (index != -1):
+                    for note in instrument.notes:
+                        data[num_notes * index + note.pitch, math.floor(note.start/T):math.floor(note.end/T)] = 1   
+            
+            self.list_of_songs.append(data[0:num_notes*(num_instruments-1), :])
+            self.label_list_of_songs.append(data[num_notes*(num_instruments-1):num_notes, :])
+
+
+    def construct_list_of_chunks(self):
+        """
+        Import an array of midi files and output a list of songs 
+        where each song is composed of a list of chunks and each 
+        chunk is a numpy array. 
+
+        """
+        T = 0.010   # Timestep (s)
+        chunk_size      = 50
+        chunk_offset    = self.chunk_step_size
+        num_notes       = 128
+        num_instruments = 4
+        
+        # Iterate through every midi and extract chunks in each song 
+#         for idx, row in self.all_songs_df.iterrows():
+        for idx, row in self.all_songs_df.items():
 #             t_end = row["midi"].get_end_time()
             t_end = row.get_end_time()
             num_timeslices = int(t_end/T)
@@ -143,5 +174,23 @@ class MidiDataset(Dataset):
         for song_list in self.label_list_of_songs:
             for chunk in song_list:
                 self.f_label_list_of_songs.append(chunk)
+                
+                
+    def save_data(self,hf, list_of_items): 
+        print("Length of list: ", len(list_of_items))
+        chunk_idx = 0
+        for idx, song in enumerate(list_of_items):
+            for chunk in range(0, len(song), 10):
+                self.dict_of_where_to_look[chunk_idx] = (idx, (chunk, chunk+self.chunk_size))
+                chunk_idx += 1
+            self.write_song_to_h5(str(idx), song, hf)
+            print("Song index: ", idx)
+            
+    def write_song_to_h5(self, idx, song, hf): 
+        # idx corresponds to the song index written as a string
+#         import pdb; pdb.set_trace()
+        hf.create_dataset(idx, data=song)
+                       
+    
 
-        
+                
