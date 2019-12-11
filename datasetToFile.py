@@ -42,22 +42,19 @@ class MidiToFile(Dataset):
             
         self.construct_list_of_songs()
         
+        print("List of songs length: ", len(self.list_of_songs))
+        print("List of labels length: ", len(self.label_list_of_songs))
+        
         with h5py.File(filename, 'w') as hf:
             self.save_data(hf, self.list_of_songs)
             
         with h5py.File(filename_labels, 'w') as hf: 
             self.save_data(hf, self.label_list_of_songs)
             
-        with open("Other.pkl", "wb") as pf:
+        picklename = data_type + "Other.pkl"
+        with open(picklename, "wb") as pf:
             pkl.dump((self.length, self.dict_of_where_to_look), pf)
-        
-        
-    def get_length(self): 
-        return self.length
-    
-    def get_dict(self):
-        return self.dict_of_where_to_look
-        
+           
  
     def instrument_to_index(self, instrument):
         """
@@ -126,13 +123,13 @@ class MidiToFile(Dataset):
         print("Length of list: ", len(list_of_items))
         chunk_idx = 0
         for idx, song in enumerate(list_of_items):
-            for chunk in range(0, len(song), 10):
+            for chunk in range(0, song.shape[1]-self.chunk_size, 10):
                 self.dict_of_where_to_look[chunk_idx] = (idx, (chunk, chunk+self.chunk_size))
                 chunk_idx += 1
             self.write_song_to_h5(str(idx), song, hf)
             print("Song index: ", idx)
-        if (chunk_idx != 0): 
-            self.length = chunk_idx
+
+        self.length = chunk_idx
         print("Num chunks: ", self.length)
             
     def write_song_to_h5(self, idx, song, hf): 

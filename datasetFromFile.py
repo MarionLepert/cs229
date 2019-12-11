@@ -17,7 +17,7 @@ import pickle as pkl
 class MidiSavedDataset(Dataset):
     """MIDI dataset."""
 
-    def __init__(self, data_type = "Train"):
+    def __init__(self, data_type = "train"):
         """
         Args:None 
         """
@@ -32,9 +32,12 @@ class MidiSavedDataset(Dataset):
         self.hf_read_labels = None
 #         self.hf_read        = h5py.File(filename, 'r')
 #         self.hf_read_labels = h5py.File(filename_labels, 'r')
-        
-        with open("Other.pkl", "rb") as pf:
-            self.length, self.dict_of_where_to_look = pkl.load(pf)
+        if (data_type == 'train'): 
+            with open("trainOther.pkl", "rb") as pf:
+                self.length, self.dict_of_where_to_look = pkl.load(pf)
+        elif (data_type == 'val'):
+            with open("valOther.pkl", "rb") as pf:
+                self.length, self.dict_of_where_to_look = pkl.load(pf)
         
     def __del__(self):
         self.hf_read.close()
@@ -44,7 +47,15 @@ class MidiSavedDataset(Dataset):
         """
         Return the length of the dataset  
         """
-        return self.length
+#         if (self.data_type == "train"): 
+#             return 1507807
+#         else: 
+#             return 184477
+        if (self.data_type == "train"): 
+            return 30000
+        else: 
+            return 3750
+#         return self.length
 
 
     def __getitem__(self, idx):
@@ -58,9 +69,10 @@ class MidiSavedDataset(Dataset):
             self.hf_read = h5py.File(self.filename, 'r')
         if self.hf_read_labels is None:
             self.hf_read_labels = h5py.File(self.filename_labels, 'r')
-                
+               
         # Data
         song, chunk = self.dict_of_where_to_look[idx]
+#         print("Song: ", song, ", Chunk: ", chunk)
         data = self.hf_read[str(song)][:, chunk[0]:chunk[1]]
         # Labels
         song, chunk = self.dict_of_where_to_look[idx]
