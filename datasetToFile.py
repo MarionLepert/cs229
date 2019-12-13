@@ -37,8 +37,8 @@ class MidiToFile(Dataset):
             
         self.dict_of_where_to_look = {}
         
-        filename = data_type + '.hdf5'
-        filename_labels = data_type + "Labels.hdf5"
+        filename = "V3" + data_type + '.hdf5'
+        filename_labels = "V3" + data_type + "Labels.hdf5"
             
         self.construct_list_of_songs()
         
@@ -47,11 +47,11 @@ class MidiToFile(Dataset):
         
         with h5py.File(filename, 'w') as hf:
             self.save_data(hf, self.list_of_songs)
-            
+        
         with h5py.File(filename_labels, 'w') as hf: 
             self.save_data(hf, self.label_list_of_songs)
-            
-        picklename = data_type + "Other.pkl"
+             
+        picklename = "V3" + data_type + "Other.pkl"
         with open(picklename, "wb") as pf:
             pkl.dump((self.length, self.dict_of_where_to_look), pf)
            
@@ -113,10 +113,29 @@ class MidiToFile(Dataset):
                 index = self.instrument_to_index(instrument.program)
                 if (index != -1):
                     for note in instrument.notes:
-                        data[num_notes * index + note.pitch, math.floor(note.start/T):math.floor(note.end/T)] = 1   
+                        data[num_notes * index + note.pitch, math.floor(note.start/T):math.floor(note.end/T)] = 1  
+                        
+#             self.list_of_songs.append(data[0:num_notes*(num_instruments-1), :])
+#             self.label_list_of_songs.append(data[num_notes*(num_instruments-1):num_notes*num_instruments, :])
+                        
+            filtered_data = data[:,~(data==0).all(axis=0)]
+        
+#             print("Data: ", data.shape)
+#             print("Filter: ", filtered_data.shape)
+
+            y_pos_labels = np.argwhere(filtered_data[num_notes*(num_instruments-1):num_notes*num_instruments, :]>0)
+            single_label_data = np.zeros((1,filtered_data.shape[1]))
+            single_label_data.fill(128)
+            for element in y_pos_labels: 
+                single_label_data[0,element[1]] = element[0] 
             
-            self.list_of_songs.append(data[0:num_notes*(num_instruments-1), :])
-            self.label_list_of_songs.append(data[num_notes*(num_instruments-1):num_notes*num_instruments, :])
+            self.list_of_songs.append(filtered_data[0:num_notes*(num_instruments-1), :])
+            self.label_list_of_songs.append(single_label_data)
+        
+            
+            
+#             self.list_of_songs.append(filtered_data[0:num_notes*(num_instruments-1), :])
+#             self.label_list_of_songs.append(filtered_data[num_notes*(num_instruments-1):num_notes*num_instruments, :])
         
             
     def save_data(self,hf, list_of_items): 
@@ -125,9 +144,10 @@ class MidiToFile(Dataset):
         for idx, song in enumerate(list_of_items):
             for chunk in range(0, song.shape[1]-self.chunk_size, 10):
                 self.dict_of_where_to_look[chunk_idx] = (idx, (chunk, chunk+self.chunk_size))
+#                 print("Song: ", idx, ", Chunk 0: ", chunk, ", Chunk 1: ", chunk + self.chunk_size)
                 chunk_idx += 1
             self.write_song_to_h5(str(idx), song, hf)
-            print("Song index: ", idx)
+#             print("Song index: ", idx, ", Shape: ", song.shape)
 
         self.length = chunk_idx
         print("Num chunks: ", self.length)

@@ -2,6 +2,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+
+
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
@@ -23,7 +25,7 @@ class Net(nn.Module):
         self.conv2 = nn.Conv1d(in_channels=64, out_channels=16, kernel_size=F2, stride=stride_2)
         self.fc1 = nn.Linear(16 * int(self.out_features), 400)
         self.fc2 = nn.Linear(400, 250)
-        self.fc3 = nn.Linear(250, 128)
+        self.fc3 = nn.Linear(250, 129)
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
