@@ -66,9 +66,9 @@ class MidiSavedDataset(Dataset):
 #             return 625
         
         if (self.data_type == "train"): 
-            return 10000
+            return 100000
         else: 
-            return 1250
+            return 12500
 
 #         if (self.data_type == "train"): 
 #             return 50
